@@ -1,1 +1,1 @@
-# KinTally by Varun and Vimal
+# KinTally by Varun and VimalPandiyan
