@@ -1,1 +1,1 @@
-# KinTally by Varun and Vimal
+# KinTally changed
