@@ -1,16 +1,23 @@
 import { Appearance } from 'react-native';
 
-const colorScheme = Appearance.getColorScheme();
+const scheme = Appearance.getColorScheme();
 
-export const theme = {
-  isDark: colorScheme === 'dark',
+export const defaultTheme = {
+  isDark: scheme === 'dark',
+  fontSize: 16,
+  primaryColor: '#3B82F6',
   colors: {
-    background: colorScheme === 'dark' ? '#0F172A' : '#F8FAFC',
-    card: colorScheme === 'dark' ? '#1E293B' : '#FFFFFF',
-    text: colorScheme === 'dark' ? '#F1F5F9' : '#1E293B',
-    subtext: colorScheme === 'dark' ? '#94A3B8' : '#64748B',
-    primary: '#3B82F6',
-    green: '#16A34A',
-    red: '#DC2626',
+    light: {
+      background: '#F8FAFC',
+      text: '#1E293B',
+      subtext: '#64748B',
+      card: '#FFFFFF',
+    },
+    dark: {
+      background: '#0F172A',
+      text: '#F1F5F9',
+      subtext: '#94A3B8',
+      card: '#1E293B',
+    },
   },
 };

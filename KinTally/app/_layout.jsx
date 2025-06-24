@@ -1,34 +1,54 @@
+import React from 'react';
 import { Tabs } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ThemeProvider } from '../hooks/useTheme';
+import { CategoryProvider } from '../hooks/useCategories';
+import { SettingsProvider } from '../hooks/useSettings';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '../hooks/useTheme';
 
-export default function Layout() {
+export default function LayoutWrapper() {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <StatusBar style="dark" />
-      <Tabs
-        screenOptions={({ route }) => ({
-          headerShown: false,
-          tabBarActiveTintColor: '#3B82F6',
-          tabBarInactiveTintColor: '#94A3B8',
-          tabBarStyle: {
-            backgroundColor: '#FFFFFF',
-            borderTopColor: '#E2E8F0',
-            paddingBottom: 6,
-            height: 60,
-          },
-          tabBarIcon: ({ color, size }) => {
-            let iconName;
+    <SettingsProvider>
+      <ThemeProvider>
+        <CategoryProvider>
+          <Layout />
+        </CategoryProvider>
+      </ThemeProvider>
+    </SettingsProvider>
+  );
+}
 
-            if (route.name === 'index') iconName = 'home-outline';
-            if (route.name === 'transactions') iconName = 'list-outline';
-            if (route.name === 'statistics') iconName = 'stats-chart-outline';
+function Layout() {
+  const { theme } = useTheme();
 
-            return <Ionicons name={iconName} size={size} color={color} />;
-          },
-        })}
-      />
-    </SafeAreaView>
+  return (
+    <Tabs
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarActiveTintColor: theme.primaryColor,
+        tabBarInactiveTintColor: theme.subtext,
+        tabBarStyle: {
+          backgroundColor: theme.card,
+          height: 60,
+          paddingBottom: 8,
+          paddingTop: 8,
+          borderTopWidth: 0.2,
+          borderTopColor: theme.subtext,
+        },
+        tabBarIcon: ({ color, size }) => {
+          let iconName;
+
+          if (route.name === 'index') {
+            iconName = 'home';
+          } else if (route.name === 'statistics') {
+            iconName = 'pie-chart';
+          } else if (route.name === 'settings') {
+            iconName = 'settings';
+          }
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
+      })}
+    />
   );
 }

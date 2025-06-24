@@ -1,17 +1,32 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { format, subMonths, addMonths } from 'date-fns';
-import { theme } from '../constants/theme';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { AntDesign } from '@expo/vector-icons';
+import { format, addMonths, subMonths } from 'date-fns';
+import { useTheme } from '../hooks/useTheme';
 
 const MonthSelector = ({ selectedMonth, setSelectedMonth }) => {
+  const { theme } = useTheme();
+
+  const handlePrev = () => {
+    setSelectedMonth((prev) => subMonths(prev, 1));
+  };
+
+  const handleNext = () => {
+    setSelectedMonth((prev) => addMonths(prev, 1));
+  };
+
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={() => setSelectedMonth(subMonths(selectedMonth, 1))}>
-        <Text style={styles.arrow}>◀</Text>
+      <TouchableOpacity onPress={handlePrev}>
+        <AntDesign name="left" size={20} color={theme.text} />
       </TouchableOpacity>
-      <Text style={styles.monthText}>{format(selectedMonth, 'MMMM yyyy')}</Text>
-      <TouchableOpacity onPress={() => setSelectedMonth(addMonths(selectedMonth, 1))}>
-        <Text style={styles.arrow}>▶</Text>
+
+      <Text style={[styles.monthText, { color: theme.text }]}>
+        {format(selectedMonth, 'MMMM yyyy')}
+      </Text>
+
+      <TouchableOpacity onPress={handleNext}>
+        <AntDesign name="right" size={20} color={theme.text} />
       </TouchableOpacity>
     </View>
   );
@@ -24,16 +39,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
   monthText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  arrow: {
-    fontSize: 20,
-    color: theme.colors.text,
   },
 });
