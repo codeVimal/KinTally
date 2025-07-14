@@ -1,29 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  Modal,
-  TextInput,
-  Alert,
-  StyleSheet,
-  Platform,
+  View, Text, FlatList, TouchableOpacity, Modal,
+  TextInput, Alert, StyleSheet, Platform
 } from 'react-native';
 import { AntDesign, Feather, Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import { DUMMY_TX, CATEGORY_META } from '../../constants/dummyData';
 
-const DEFAULT_CATEGORIES = Object.entries(CATEGORY_META).map(
-  ([id, meta]) => ({ id, name: meta.label, color: meta.color })
-);
+import { CATEGORY_META } from '../../constants/dummyData';
+import { auth, db } from '../../firebaseConfig';
+import { signOut } from 'firebase/auth';
+import {
+  collection, query, where, onSnapshot,
+  addDoc, doc, updateDoc, deleteDoc
+} from 'firebase/firestore';
+import AuthCheck from '../auth-check';
+
+const DEFAULT_CATEGORIES = Object.entries(CATEGORY_META).map(([id, meta]) => ({
+  id,
+  name: meta.label,
+  color: meta.color,
+}));
 
 export default function Home() {
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
-  const [transactions, setTransactions] = useState(DUMMY_TX);
+  const uid = auth.currentUser?.uid;
+  const email = auth.currentUser?.email;
+
+  const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
 
   const [visible, setVisible] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -32,6 +38,21 @@ export default function Home() {
   const [selectedCat, setCat] = useState('food');
   const [txDate, setTxDate] = useState(new Date());
   const [showDP, setShowDP] = useState(false);
+
+  // 🔄 Fetch transactions from Firestore
+  useEffect(() => {
+    if (!uid) return;
+    const q = query(collection(db, 'transactions'), where('userId', '==', uid));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const txs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        time: doc.data().time.toDate(),
+      }));
+      setTransactions(txs);
+    });
+    return unsub;
+  }, [uid]);
 
   const shiftMonth = (d) => {
     const n = new Date(selectedMonth);
@@ -63,43 +84,42 @@ export default function Home() {
     setVisible(false);
   };
 
-  const saveTx = () => {
+  const saveTx = async () => {
     if (!amount) return Alert.alert('Enter amount');
     const amt = parseFloat(amount);
     if (Number.isNaN(amt)) return Alert.alert('Amount must be a number');
 
-    if (editId) {
-      setTransactions((txs) =>
-        txs.map((tx) =>
-          tx.id === editId
-            ? {
-                ...tx,
-                amount: amt,
-                description,
-                category: selectedCat,
-                time: txDate,
-              }
-            : tx
-        )
-      );
-    } else {
-      setTransactions((txs) => [
-        {
-          id: `t${Date.now()}`,
+    try {
+      if (editId) {
+        const ref = doc(db, 'transactions', editId);
+        await updateDoc(ref, {
           amount: amt,
           description,
           category: selectedCat,
           time: txDate,
-        },
-        ...txs,
-      ]);
+        });
+      } else {
+        await addDoc(collection(db, 'transactions'), {
+          userId: uid,
+          amount: amt,
+          description,
+          category: selectedCat,
+          time: txDate,
+        });
+      }
+      close();
+    } catch (err) {
+      Alert.alert('Error saving transaction', err.message);
     }
-
-    close();
   };
 
-  const deleteTx = (id) =>
-    setTransactions((txs) => txs.filter((t) => t.id !== id));
+  const deleteTx = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'transactions', id));
+    } catch (err) {
+      Alert.alert('Error deleting transaction', err.message);
+    }
+  };
 
   const addCategory = () =>
     Alert.prompt('New category name', '', (name) => {
@@ -162,122 +182,136 @@ export default function Home() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.monthNav}>
-          <TouchableOpacity onPress={() => shiftMonth(-1)}>
-            <Ionicons name="chevron-back" size={24} color="#3a86ff" />
-          </TouchableOpacity>
-          <Text style={styles.monthLbl}>{monthLabel}</Text>
-          <TouchableOpacity onPress={() => shiftMonth(1)}>
-            <Ionicons name="chevron-forward" size={24} color="#3a86ff" />
+    <AuthCheck>
+      <View style={styles.container}>
+        {/* 🔐 Email + Logout */}
+        <View style={styles.authHeader}>
+          <Text style={styles.email}>Email: {email}</Text>
+          <TouchableOpacity onPress={() => signOut(auth)}>
+            <Text style={styles.logout}>Logout</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={() => setVisible(true)}>
-          <AntDesign name="pluscircle" size={28} color="#3a86ff" />
-        </TouchableOpacity>
-      </View>
 
-      {/* List */}
-      <FlatList
-        data={txForMonth}
-        keyExtractor={(i) => i.id}
-        renderItem={renderTx}
-        contentContainerStyle={{ paddingBottom: 120 }}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No transactions this month</Text>
-        }
-      />
+        {/* 📅 Month Navigation */}
+        <View style={styles.header}>
+          <View style={styles.monthNav}>
+            <TouchableOpacity onPress={() => shiftMonth(-1)}>
+              <Ionicons name="chevron-back" size={24} color="#3a86ff" />
+            </TouchableOpacity>
+            <Text style={styles.monthLbl}>{monthLabel}</Text>
+            <TouchableOpacity onPress={() => shiftMonth(1)}>
+              <Ionicons name="chevron-forward" size={24} color="#3a86ff" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity onPress={() => setVisible(true)}>
+            <AntDesign name="pluscircle" size={28} color="#3a86ff" />
+          </TouchableOpacity>
+        </View>
 
-      {/* Modal */}
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
-        <View style={styles.backdrop}>
-          <View style={styles.card}>
-            <Text style={styles.title}>{editId ? 'Edit' : 'Add'} Transaction</Text>
+        <FlatList
+          data={txForMonth}
+          keyExtractor={(i) => i.id}
+          renderItem={renderTx}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          ListEmptyComponent={
+            <Text style={styles.empty}>No transactions this month</Text>
+          }
+        />
 
-            <TextInput
-              placeholder="Amount (₹)"
-              value={amount}
-              onChangeText={setAmount}
-              keyboardType="numeric"
-              style={styles.input}
-            />
-            <TextInput
-              placeholder="Description"
-              value={description}
-              onChangeText={setDesc}
-              style={styles.input}
-            />
+        {/* ➕ Add/Edit Modal */}
+        <Modal visible={visible} animationType="slide" transparent onRequestClose={close}>
+          <View style={styles.backdrop}>
+            <View style={styles.card}>
+              <Text style={styles.title}>{editId ? 'Edit' : 'Add'} Transaction</Text>
 
-            {/* --------- Date Input --------- */}
-            <Text style={styles.label}>Date</Text>
-            {Platform.OS === 'web' ? (
-              <DatePicker
-                selected={txDate}
-                onChange={(d) => setTxDate(d)}
-                dateFormat="dd/MM/yyyy"
-                className="react-datepicker__input"
+              <TextInput
+                placeholder="Amount (₹)"
+                value={amount}
+                onChangeText={setAmount}
+                keyboardType="numeric"
+                style={styles.input}
               />
-            ) : (
-              <>
-                <TouchableOpacity onPress={() => setShowDP(true)} style={styles.dateBtn}>
-                  <Text style={styles.dateTxt}>
-                    Date: {txDate.toLocaleDateString()}
-                  </Text>
-                </TouchableOpacity>
-                {showDP && (
-                  <DateTimePicker
-                    value={txDate}
-                    mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                    onChange={(event, selDate) => {
-                      if (Platform.OS === 'android') setShowDP(false);
-                      if (event.type !== 'dismissed') {
-                        setTxDate(selDate || txDate);
-                      }
-                    }}
-                  />
-                )}
-              </>
-            )}
+              <TextInput
+                placeholder="Description"
+                value={description}
+                onChangeText={setDesc}
+                style={styles.input}
+              />
 
-            <Text style={styles.label}>Category</Text>
-            <View style={styles.catRow}>
-              {categories.map((c) => (
-                <TouchableOpacity
-                  key={c.id}
-                  onPress={() => setCat(c.id)}
-                  style={[
-                    styles.catChip,
-                    { backgroundColor: selectedCat === c.id ? c.color : '#f0f0f0' },
-                  ]}
-                >
-                  <Text style={{ color: selectedCat === c.id ? '#fff' : c.color }}>{c.name}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity style={styles.addCat} onPress={addCategory}>
-                <AntDesign name="plus" size={16} color="#555" />
-              </TouchableOpacity>
-            </View>
+              <Text style={styles.label}>Date</Text>
+              {Platform.OS === 'web' ? (
+                <DatePicker
+                  selected={txDate}
+                  onChange={(d) => setTxDate(d)}
+                  dateFormat="dd/MM/yyyy"
+                  className="react-datepicker__input"
+                />
+              ) : (
+                <>
+                  <TouchableOpacity onPress={() => setShowDP(true)} style={styles.dateBtn}>
+                    <Text style={styles.dateTxt}>
+                      Date: {txDate.toLocaleDateString()}
+                    </Text>
+                  </TouchableOpacity>
+                  {showDP && (
+                    <DateTimePicker
+                      value={txDate}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(event, selDate) => {
+                        if (Platform.OS === 'android') setShowDP(false);
+                        if (event.type !== 'dismissed') {
+                          setTxDate(selDate || txDate);
+                        }
+                      }}
+                    />
+                  )}
+                </>
+              )}
 
-            <View style={styles.btnRow}>
-              <TouchableOpacity style={styles.btn} onPress={close}>
-                <Text>Close</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.btn, styles.save]} onPress={saveTx}>
-                <Text style={{ color: '#fff' }}>Save</Text>
-              </TouchableOpacity>
+              <Text style={styles.label}>Category</Text>
+              <View style={styles.catRow}>
+                {categories.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    onPress={() => setCat(c.id)}
+                    style={[
+                      styles.catChip,
+                      { backgroundColor: selectedCat === c.id ? c.color : '#f0f0f0' },
+                    ]}
+                  >
+                    <Text style={{ color: selectedCat === c.id ? '#fff' : c.color }}>{c.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity style={styles.addCat} onPress={addCategory}>
+                  <AntDesign name="plus" size={16} color="#555" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.btnRow}>
+                <TouchableOpacity style={styles.btn} onPress={close}>
+                  <Text>Close</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.btn, styles.save]} onPress={saveTx}>
+                  <Text style={{ color: '#fff' }}>Save</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+      </View>
+    </AuthCheck>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff', padding: 16 },
+  authHeader: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', marginBottom: 8
+  },
+  email: { fontSize: 14, color: '#333' },
+  logout: { fontSize: 14, fontWeight: 'bold', color: '#e74c3c' },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   monthNav: { flexDirection: 'row', alignItems: 'center' },
   monthLbl: { fontSize: 20, fontWeight: '600', marginHorizontal: 6 },
@@ -289,7 +323,6 @@ const styles = StyleSheet.create({
   txDate: { fontSize: 12, color: '#888', marginTop: 4 },
   txActions: { flexDirection: 'row', alignItems: 'center' },
   empty: { textAlign: 'center', marginTop: 60, color: '#888', fontStyle: 'italic' },
-
   backdrop: { flex: 1, backgroundColor: '#0006', justifyContent: 'center', padding: 20 },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 20 },
   title: { fontSize: 20, fontWeight: '600', marginBottom: 12 },
